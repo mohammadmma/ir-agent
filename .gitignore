@@ -1,0 +1,8 @@
+.venv/
+*.ipynb
+dataset/
+__pycache__/
+logs/
+result/
+*.csv
+*.pkl
