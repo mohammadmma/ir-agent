@@ -10,7 +10,8 @@ from src.domain.page import Page
 from src.evaluation.interfaces import (
     DiversityReport,
     InterfaceDiversityEvaluator,
-    InterfaceWikiRankScorer,
+    InterfaceScorer,
+    InterfaceFinalScorer,
 )
 from src.processing.interfaces import InterfaceEmbedder
 from config import default_config
@@ -20,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SubmissionScore:
-    """The competition submission scores — a small value object for output."""
-
     dataset_size: int
     diversity: float
     wikirank: float
@@ -32,12 +31,7 @@ def enrich_pages(
     pages: Iterable[Page],
     embedder: InterfaceEmbedder,
 ) -> list[Page]:
-    """Attach embeddings to pages using the embedder.
-
-    The embedder produces new `Page` objects (immutable); originals are
-    untouched. This is the processing step: collection produces bare pages,
-    evaluation needs enriched pages.
-    """
+    """Attach embeddings to pages using the embedder."""
     logger.info("Enriching %d pages with embeddings...", len(list(pages)) if isinstance(pages, list) else "N")
     enriched = embedder.embed_batch(pages)
     logger.info("Embeddings complete.")
@@ -47,23 +41,20 @@ def enrich_pages(
 def compute_scores(
     pages: Iterable[Page],
     diversity_eval: InterfaceDiversityEvaluator,
-    wikirank_eval: InterfaceWikiRankScorer,
-    ground_truth,
+    wikirank_eval: InterfaceScorer,
+    final_eval: InterfaceFinalScorer
 ) -> tuple[SubmissionScore, DiversityReport]:
     """Score the collected pages and return both the submission score and
     the detailed diversity report.
-
-    The final score formula matches the competition specification:
-        final = (wikirank + 100 * diversity) / 2
     """
     pages_list = list(pages)
 
     diversity_report = diversity_eval.evaluate(pages_list)
     diversity_score = diversity_report.overall_score()
 
-    wikirank_score = wikirank_eval.score(pages_list, ground_truth)
+    wikirank_score = wikirank_eval.score(pages_list)
 
-    final_score = (wikirank_score + 100 * diversity_score) / 2
+    final_score = final_eval.score(wikirank_score, diversity_score)
 
     scores = SubmissionScore(
         dataset_size=len(pages_list),
@@ -78,9 +69,7 @@ def save_dataset_pkl(pages: Iterable[Page], path: Path = default_config.paths.pk
     """Save the dataset as a pickle file.
 
     Pages are saved as a list of dicts (the format expected by the Moodle
-    / Kaggle evaluation pipeline). The dict shape matches the legacy format
-    for backward compatibility: title, content, url, links, categories,
-    embeddings.
+    / Kaggle evaluation pipeline).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     data = [

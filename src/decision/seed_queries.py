@@ -1,11 +1,7 @@
 """Seed queries for broad Wikipedia exploration.
 
 This is DATA, not logic. The agent imports these as a list and feeds them to
-`repo.search_pages()` during phase 1. Keeping them here (not inside the agent
-class) means:
-  * The agent stays focused on orchestration logic (SRP).
-  * Queries can be swapped/extended without touching the agent.
-  * They can be loaded from a file in the future without code changes.
+`repo.search_pages()` during phase 1.
 """
 
 SEED_QUERIES: list[str] = [

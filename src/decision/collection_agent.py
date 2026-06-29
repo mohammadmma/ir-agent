@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+import random
 
 from config import default_config
 from src.decision.interfaces import (
     CollectionResult,
-    InterfaceAgent,
     InterfaceSelectionPolicy,
 )
 from src.decision.seed_queries import SEED_QUERIES
@@ -25,16 +24,6 @@ class CollectionAgent:
     pages. It delegates every *quality decision* to the selection policy and
     every *retrieval operation* to the repository.
 
-    This class does NOT know about:
-      * embeddings          → evaluation layer's concern
-      * wikirank / scoring  → evaluation layer's concern
-      * persistence          → `main.py`'s concern (composition root)
-
-    It depends only on abstractions (DIP):
-      * `InterfacePageRepository`  — search and fetch pages
-      * `InterfaceSelectionPolicy` — what to fetch next, what to keep
-
-    The 3-phase loop preserves the legacy agent's exact behaviour:
       Phase 1: Broad search — discover candidates via diverse seed queries
       Phase 2: Fetch — iterate candidates, fetch and keep via policy
       Phase 3: Fill — use remaining known pages to reach the target
@@ -110,16 +99,12 @@ class CollectionAgent:
         )
 
     # ── Phase implementations ─────────────────────────────────────────
-    # Each phase is a private method with a clear single purpose.
-    # Extracted from the legacy monolithic `collect_dataset()`.
-
     def _phase1_search(self, candidate_pool: set[str]) -> None:
         """Discover candidates via diverse seed queries."""
         logger.info("Phase 1: Searching diverse topics...")
         queries = self._seed_queries
 
         for i, query in enumerate(queries):
-            # Stop if budget spent or pool is large enough
             if self._repo.requests_used >= self._budget_phase1:
                 break
             if len(candidate_pool) >= self._max_candidate_pool:
@@ -149,6 +134,7 @@ class CollectionAgent:
         """Fetch candidates, keep pages that pass the policy's quality gate."""
         logger.info("Phase 2: Fetching pages...")
         candidates = list(candidate_pool - collected_titles)
+        random.shuffle(candidates)
 
         for page_name in candidates:
             if len(collected) >= self._target_pages:
@@ -165,7 +151,6 @@ class CollectionAgent:
 
                 collected.append(page)
                 collected_titles.add(page.title)
-                self._policy.observe(page)
 
                 if len(collected) % self._log_interval == 0:
                     self._log_progress(collected, start_time)
@@ -186,6 +171,7 @@ class CollectionAgent:
         # The guard's `known_pages` contains everything discovered via search
         # or links during phases 1–2. Try any we haven't fetched yet.
         remaining = list(self._repo.known_pages - collected_titles)
+        random.shuffle(remaining)
 
         for page_name in remaining:
             if len(collected) >= self._target_pages:
@@ -202,7 +188,6 @@ class CollectionAgent:
 
                 collected.append(page)
                 collected_titles.add(page.title)
-                self._policy.observe(page)
 
                 if len(collected) % 100 == 0:
                     self._log_progress(collected, start_time)

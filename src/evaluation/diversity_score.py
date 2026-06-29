@@ -9,14 +9,11 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from src.domain.page import Page
-from src.evaluation.interfaces import DiversityReport, InterfaceDiversityEvaluator
+from src.evaluation.interfaces import DiversityReport
 from config import default_config
 
 logger = logging.getLogger(__name__)
 
-# ── NLTK tokenizer (lazy download) ──────────────────────────────────────
-# Download once at module level, not at call site. Quiet so it doesn't spam
-# logs on repeated imports.
 try:
     nltk.data.find("tokenizers/punkt_tab")
 except LookupError:
@@ -24,10 +21,6 @@ except LookupError:
 
 
 # ── private sub-metrics ────────────────────────────────────────────────
-# These are implementation details of the diversity evaluator. They are NOT
-# exposed via any interface — callers only see `DiversityEvaluator.evaluate()`.
-# Kept in the same file per your design decision: one cohesive module.
-
 def _lexical_diversity(pages: list[Page]) -> float:
     """Ratio of unique words to total words across all page contents.
 
@@ -48,7 +41,7 @@ def _lexical_diversity(pages: list[Page]) -> float:
 def _semantic_diversity(pages: list[Page]) -> float:
     """Average pairwise cosine distance between page embeddings.
 
-    Requires pages to have embeddings attached (via IEmbedder).
+    Requires pages to have embeddings attached (via InterfaceEmbedder).
     Returns 0 if fewer than 2 pages have embeddings.
     A high value means pages are semantically dissimilar (good).
     """
@@ -85,32 +78,18 @@ def _category_diversity(pages: list[Page]) -> float:
 
 
 # ── composite evaluator ──────────────────────────────────────────────
-# Satisfies `InterfaceDiversityEvaluator` (which refines `InterfaceScorer`).
-# Uses the Composite pattern: it delegates to the three private sub-metrics
-# and combines them with configurable weights. The sub-metrics are
-# interchangeable parts — a new metric can be added by writing a new
-# private function and wiring it in here (OCP).
-
 class DiversityEvaluator:
-    """Composite diversity scorer combining lexical, semantic, and category.
+    """Composite diversity scorer combining lexical, semantic, and category."""
 
-    Satisfies both:
-      * `InterfaceScorer.score()`  → returns a single float (the overall)
-      * `InterfaceDiversityEvaluator.evaluate()` → returns the full report
-
-    The weights default to the competition formula (0.3 / 0.4 / 0.3) and are
-    injectable so the orchestrator can tune them via config (OCP).
-    """
-
-    def __init__(
-        self,
-        lexical_weight: float = default_config.scoring_conf.lexical_weight,
-        semantic_weight: float = default_config.scoring_conf.semantic_weight,
-        category_weight: float = default_config.scoring_conf.category_weight,
-    ) -> None:
-        self._lexical_weight = lexical_weight
-        self._semantic_weight = semantic_weight
-        self._category_weight = category_weight
+    # def __init__(
+    #     self,
+    #     lexical_weight: float = default_config.scoring_conf.lexical_weight,
+    #     semantic_weight: float = default_config.scoring_conf.semantic_weight,
+    #     category_weight: float = default_config.scoring_conf.category_weight,
+    # ) -> None:
+    #     self._lexical_weight = lexical_weight
+    #     self._semantic_weight = semantic_weight
+    #     self._category_weight = category_weight
 
     def evaluate(self, pages: Iterable[Page]) -> DiversityReport:
         """Score all three diversity dimensions, return the structured report."""
@@ -138,11 +117,11 @@ class DiversityEvaluator:
 
         return DiversityReport(lexical=lex, semantic=sem, category=cat)
 
-    def score(self, pages: Iterable[Page]) -> float:
-        """Single-float convenience — satisfies `InterfaceScorer`."""
-        report = self.evaluate(pages)
-        return report.overall_score(
-            lexical_weight=self._lexical_weight,
-            semantic_weight=self._semantic_weight,
-            category_weight=self._category_weight,
-        )
+    # def score(self, pages: Iterable[Page]) -> float:
+    #     """Single-float convenience — satisfies `InterfaceScorer`."""
+    #     report = self.evaluate(pages)
+    #     return report.overall_score(
+    #         lexical_weight=self._lexical_weight,
+    #         semantic_weight=self._semantic_weight,
+    #         category_weight=self._category_weight,
+    #     )

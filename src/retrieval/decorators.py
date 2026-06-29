@@ -10,16 +10,6 @@ from src.utils.exceptions import BudgetExceededError, IllegalRequestError
 from config import default_config
 
 
-# ── constraint violations ──────────────────────────────────────────────
-# Distinct exception types let the orchestrator react differently to each
-# failure (e.g. stop on budget-exhausted vs. just log an illegal attempt)
-# without parsing error strings. A small, flat hierarchy — one base, two
-# concrete causes — keeps it simple.
-
-
-
-
-
 class RetrievalGuardDecorator:
     """Decorator over `InterfacePageRepository` enforcing the project's three
     retrieval constraints:
@@ -33,13 +23,7 @@ class RetrievalGuardDecorator:
     The guard is a *concrete* class that *implements* `InterfacePageRepository`,
     so it is a drop-in stand-in for a bare repository: any client expecting
     `InterfacePageRepository` (the collection agent) works unchanged with a
-    guarded or an unguarded repository. That interchangeability is the whole
-    point of the Decorator pattern here.
-
-    All constraint bookkeeping — the request counter and the discovered-page
-    set — lives HERE, not in the wrapped repository. This keeps the adapter
-    focused on pure retrieval (SRP) and makes the constraints unit-testable
-    with a fake repository, no network required (the testability payoff).
+    guarded or an unguarded repository.
     """
 
     def __init__(
@@ -55,16 +39,12 @@ class RetrievalGuardDecorator:
         self._requests_used = 0
 
     # ── read-only state (consumed by the orchestrator) ────────────────
-    # Exposed so the collection agent can drive its loop ("stop when budget
-    # gone") and its fill phase ("try remaining known pages") without the
-    # guard's internals leaking.
-
     @property
     def requests_used(self) -> int:
         return self._requests_used
 
     @property
-    def remaining(self) -> int:
+    def remaining_budget(self) -> int:
         return max(self._request_limit - self._requests_used, 0)
 
     @property
@@ -84,11 +64,6 @@ class RetrievalGuardDecorator:
     def _enforce_fetchable(self, page_name: str) -> None:
         """Validate a fetch BEFORE charging. A rejected request makes no API
         call, so it must not consume budget.
-
-        (Legacy code charged first, then rejected unknown pages without a
-        refund — burning budget on a no-op. Validating before charging fixes
-        that. It is behaviour-equivalent in practice because the agent only
-        ever fetches pages it discovered, so the discovery check rarely fires.)
         """
         if page_name not in self._known_pages:
             raise IllegalRequestError(
@@ -104,37 +79,26 @@ class RetrievalGuardDecorator:
         self._known_pages.update(t for t in titles if t in self._legal_pages)
 
     # ── InterfacePageRepository ───────────────────────────────────────
-    # Same signatures as the port. The guard adds bookkeeping around the
-    # delegation; it never invents new behaviour.
-
     def search_pages(self, query: str) -> list[str]:
-        # A search always costs one request, even if the inner call later
-        # fails (it may have hit the network). This matches the legacy
-        # accounting. No refund on failure.
         self._charge()
         titles = self._inner.search_pages(query)
-        # Only legal titles are returned and recorded — preserving the
-        # legacy contract that every candidate is a legal page.
         legal_titles = [t for t in titles if t in self._legal_pages]
         self._record_discovered(legal_titles)
         return legal_titles
 
     def fetch_page(self, page_name: str) -> Optional[Page]:
-        # 1. validate (no charge for rejected requests)
         self._enforce_fetchable(page_name)
-        # 2. charge
+
         self._charge()
-        # 3. delegate
+
         try:
             page = self._inner.fetch_page(page_name)
         except Exception:
-            # The call failed — refund so a network error doesn't burn budget.
             self._requests_used -= 1
             raise
         if page is None:
-            # Page does not exist — refund so empty pages don't waste budget.
             self._requests_used -= 1
             return None
-        # 4. record newly discovered legal links for future fetches
+
         self._record_discovered(page.links)
         return page

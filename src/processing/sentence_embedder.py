@@ -13,22 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class SentenceEmbedder:
-    """Concrete `InterfaceEmbedder` backed by a sentence-transformers model.
-
-    Single responsibility: turn page text into vector embeddings. That's it.
-    It knows nothing about Wikipedia, budgets, scoring, or dataset management.
-
-    The model is *injected* (DIP) so callers can choose any sentence-transformers
-    checkpoint. A default is provided for convenience so normal usage is a
-    one-liner. Tests can inject a tiny/fast model or a `DummyEmbedder`.
-
-    Design note — batch vs single:
-      * `embed_batch` extracts ALL content strings first, then calls
-        `model.encode(texts)` once. This is dramatically faster than calling
-        `encode` per-page because the underlying library vectorises the batch.
-      * `embed` delegates to `embed_batch` — no separate per-page path to
-        maintain. Single page is just a batch of one.
-    """
+    """Concrete `InterfaceEmbedder` backed by a sentence-transformers model."""
 
     def __init__(self, model: SentenceTransformer | None = None) -> None:
         self._model = model or SentenceTransformer("all-MiniLM-L6-v2")
@@ -61,25 +46,25 @@ class SentenceEmbedder:
         return enriched
 
 
-class DummyEmbedder:
-    """Fake `InterfaceEmbedder` that returns deterministic embeddings.
+# class DummyEmbedder:
+#     """Fake `InterfaceEmbedder` that returns deterministic embeddings.
 
-    Returns a zero-filled numpy array of the given `dim` for every page.
-    Useful for:
-      * unit-testing the agent / scorers without downloading the real model
-      * CI pipelines where GPU / model weights are unavailable
-      * fast iteration during development
+#     Returns a zero-filled numpy array of the given `dim` for every page.
+#     Useful for:
+#       * unit-testing the agent / scorers without downloading the real model
+#       * CI pipelines where GPU / model weights are unavailable
+#       * fast iteration during development
 
-    Also satisfies `InterfaceEmbedder` structurally (no base class needed).
-    """
+#     Also satisfies `InterfaceEmbedder` structurally (no base class needed).
+#     """
 
-    def __init__(self, dim: int = 384) -> None:
-        self._dim = dim
+#     def __init__(self, dim: int = 384) -> None:
+#         self._dim = dim
 
-    def embed(self, page: Page) -> Page:
-        return self.embed_batch([page])[0]
+#     def embed(self, page: Page) -> Page:
+#         return self.embed_batch([page])[0]
 
-    def embed_batch(self, pages: Iterable[Page]) -> list[Page]:
-        pages_list = list(pages)
-        dummy_vec = np.zeros(self._dim, dtype=np.float32)
-        return [p.with_embedding(dummy_vec) for p in pages_list]
+#     def embed_batch(self, pages: Iterable[Page]) -> list[Page]:
+#         pages_list = list(pages)
+#         dummy_vec = np.zeros(self._dim, dtype=np.float32)
+#         return [p.with_embedding(dummy_vec) for p in pages_list]

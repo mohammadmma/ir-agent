@@ -7,18 +7,6 @@ from src.domain.page import Page
 
 @runtime_checkable
 class InterfaceEmbedder(Protocol):
-    """Port: turn page text into vector embeddings.
-
-    This is the processing layer's only contract. Keeping it separate means
-    the retrieval layer never imports an embedding model (clean-architecture
-    rule: "no embedding logic inside the crawler"), and the evaluation /
-    decision layers depend on this abstraction rather than on
-    `sentence-transformers` directly.
-
-    Implementations are free to be model-backed (`SentenceEmbedder`) or
-    deterministic fakes (`DummyEmbedder`) for fast, offline tests.
-    """
-
     def embed(self, page: Page) -> Page:
         """Return a new `Page` with its embedding attached.
 

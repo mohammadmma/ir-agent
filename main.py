@@ -22,11 +22,12 @@ from src.processing.sentence_embedder import SentenceEmbedder
 
 from src.evaluation.diversity_score import DiversityEvaluator
 from src.evaluation.wikirank_score import WikiRankScorer
+from src.evaluation.final_score import FinalMeanScorer
 
-from src.decision.policies.random_policy import RandomPolicy
+from src.decision.policies.random_policy import MinLengthPolicy
 from src.decision.collection_agent import make_agent
 
-from src.utils.persistence import (
+from src.persisting.persistence import (
     enrich_pages,
     compute_scores,
     save_dataset_pkl,
@@ -63,7 +64,7 @@ def main() -> None:
     logger.info("Embedder ready.\n")
 
     # ── 3. Build the decision layer ───────────────────────────────────
-    policy = RandomPolicy(min_char=default_config.page_config.min_char)
+    policy = MinLengthPolicy(min_char=default_config.page_config.min_char)
     agent = make_agent(
         repo=guarded_repo,
         policy=policy,
@@ -86,14 +87,11 @@ def main() -> None:
     # ── 6. Score the dataset ────────────────────────────────────────
     ground_truth = pd.read_csv(default_config.paths.en_tsv_file_path, sep="\t")
 
-    diversity_eval = DiversityEvaluator(
-        lexical_weight=default_config.scoring_conf.lexical_weight,
-        semantic_weight=default_config.scoring_conf.semantic_weight,
-        category_weight=default_config.scoring_conf.category_weight,
-    )
+    diversity_eval = DiversityEvaluator()
     wikirank_eval = WikiRankScorer(ground_truth)
+    final_eval = FinalMeanScorer()
 
-    scores, report = compute_scores(enriched_pages, diversity_eval, wikirank_eval, ground_truth)
+    scores, report = compute_scores(enriched_pages, diversity_eval, wikirank_eval, final_eval)
 
     logger.info("SCORES:")
     logger.info("  Dataset size:    %d", scores.dataset_size)

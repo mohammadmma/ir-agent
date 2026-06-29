@@ -35,7 +35,7 @@ class PageConfig:
 @dataclass(frozen=True)
 class AgentConfig:
     target_pages: int = 5000
-    dev_mode: bool = False
+    dev_mode: bool = True
 
     # Phase 1: how many search requests to spend discovering candidates
     budget_phase1: int = 2500
